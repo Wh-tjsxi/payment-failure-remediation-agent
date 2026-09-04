@@ -1,0 +1,40 @@
+[project]
+name = "payment-failure-remediation-agent"
+version = "0.1.0"
+description = "Agentic investigation, remediation, and verification system for failed payments"
+requires-python = ">=3.11"
+dependencies = [
+    "temporalio>=1.7",
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "anthropic>=0.34",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.3",
+    "pydantic>=2.8",
+    "opentelemetry-sdk>=1.26",
+    "opentelemetry-exporter-otlp>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
