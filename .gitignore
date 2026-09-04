@@ -28,3 +28,6 @@ npm-debug.log*
 # Editors
 .vscode/
 .idea/
+
+# Local project memory (not shared)
+CLAUDE.md
