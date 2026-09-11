@@ -104,6 +104,37 @@ stateDiagram-v2
 
 `Case`, `Evidence`, `Diagnosis`, `RemediationProposal`, `Action`, `Approval`, `RunbookEntry` (provisional/canonical, versioned), `Verification`, `AuditEvent` (append-only, tamper-evident). Evidence stores pointers to a blob store, not inline PII. Every entity is scoped to a `case_id` for tracing.
 
+### Database schema (as built so far)
+
+Only 2 of the 9 entities above have a real Postgres table today — the rest stay as Temporal workflow/activity history until the sprint that gives them a concrete reason to be queried directly from SQL (see Sprint 1 in Section 3). This section is kept in sync with `db/migrations/0001_init.sql`, which is the source of truth for exact column types/constraints.
+
+**`cases`** — one row per case, mirrors the workflow's current state:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `TEXT` PK | Case id, also used to derive the Temporal workflow id (`case-<id>`) |
+| `idempotency_key` | `TEXT` UNIQUE | Dedupes retried/duplicate `payment.failed` webhooks |
+| `status` | `TEXT` | Mirrors `CaseStatus` (Section 1's state names); free text, not a Postgres ENUM, so new states don't need a migration |
+| `event_payload` | `JSONB` | The raw fake `payment.failed` payload the case was created from |
+| `workflow_id` | `TEXT` | Temporal workflow id, for jumping from a DB row to the Temporal UI |
+| `attempt_count` | `INTEGER` | `REINVESTIGATION` loop counter; escalates once it exceeds 3 |
+| `created_at` / `updated_at` | `TIMESTAMPTZ` | |
+
+**`audit_events`** — append-only log of every state transition (one row per transition, never updated/deleted):
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `BIGSERIAL` PK | |
+| `case_id` | `TEXT` FK → `cases.id` | |
+| `from_status` | `TEXT`, nullable | `NULL` on the case-created event |
+| `to_status` | `TEXT` | |
+| `detail` | `JSONB`, nullable | Free-form transition context (e.g. which policy rule fired); no PII by design, matching the "Evidence ... not inline PII" rule above |
+| `created_at` | `TIMESTAMPTZ` | |
+
+Indexed on `(case_id, created_at)` so pulling a case's full timeline in order is cheap.
+
+**Not built yet:** `Evidence`, `Diagnosis`, `RemediationProposal`, `Action`, `Approval`, `RunbookEntry`, `Verification` tables. Each gets added in the sprint that first needs to persist it, rather than all 9 up front — a stricter YAGNI call than this doc originally implied, made explicitly during Sprint 1.
+
 ---
 
 ## 3. Delivery Plan — Sprints & User Stories (2-week sprints)
