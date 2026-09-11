@@ -20,12 +20,13 @@ This brings up Temporal (workflow engine), Postgres (+ pgvector), and the observ
 
 ```
 src/
-  simulator/            # synthetic Payment Gateway Simulator — stands in for a real processor
-  workflows/             # Temporal workflows (case lifecycle, runbook review)
-  activities/
-    evidence_connectors/ # pluggable evidence sources (gateway, observability, customer, case history)
-  policy/                 # deterministic policy/risk rules engine
-  actions/                # remediation action adapters (retry, refund, config change, ...)
+  payment_failure_remediation_agent/
+    simulator/            # synthetic Payment Gateway Simulator — stands in for a real processor
+    workflows/             # Temporal workflows (case lifecycle, runbook review)
+    activities/
+      evidence_connectors/ # pluggable evidence sources (gateway, observability, customer, case history)
+    policy/                 # deterministic policy/risk rules engine
+    actions/                # remediation action adapters (retry, refund, config change, ...)
 db/
   migrations/             # Postgres schema
 docs/
