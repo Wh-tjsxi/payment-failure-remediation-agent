@@ -31,3 +31,4 @@ npm-debug.log*
 
 # Local project memory (not shared)
 CLAUDE.md
+debugged_log.md
