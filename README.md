@@ -6,7 +6,7 @@ Built as a personal project on entirely synthetic data (no real bank/payment dat
 
 ## Status
 
-Early scaffolding — see `docs/DESIGN.md` Section 3 for the sprint plan. Currently: Sprint 0 (foundations).
+Sprint 1 (Walking Skeleton) is complete — see `docs/DESIGN.md` Section 3 for the sprint plan. A fake `payment.failed` event runs end-to-end through Temporal to `CASE_CLOSED` with every step stubbed. Currently starting Sprint 2 (Payment Gateway Simulator + real evidence collection).
 
 ## Quickstart
 
