@@ -1,24 +1,25 @@
-"""Sprint 1 stub for the prior-case-history evidence connector.
+"""Prior-case-history evidence connector (docs/DESIGN.md Section 3, Sprint 2).
 
-Implements the `Connector` protocol from `base.py` with fixed fixture
-data. Sprint 2 replaces `fetch`'s body with a real query against the
-`cases`/`audit_events` tables for this customer's prior cases -- the
-activity name/signature stay the same.
+Surfaces `prior_remediation_attempted` from the case's scripted scenario --
+stops the system from proposing an already-failed fix twice. Stands in for
+a real query against this system's own `cases`/`audit_events` tables,
+which Sprint 2 deliberately defers: there's no `customer_id` column yet to
+key that query on, and nothing in this sprint needs it (docs/DESIGN.md
+Section 3's DB-schema recommendation).
 """
 
 from temporalio import activity
 
 from payment_failure_remediation_agent.models import Evidence
+from payment_failure_remediation_agent.simulator import get_scenario
 
 
 class CaseHistoryConnector:
-    async def fetch(self, case_id: str) -> Evidence:
-        return Evidence(
-            source="case_history",
-            data={"prior_cases": "0", "prior_similar_failures": "0"},
-        )
+    async def fetch(self, case_id: str, event_payload: dict[str, str]) -> Evidence:
+        scenario = get_scenario(event_payload.get("scenario"))
+        return Evidence(source="case_history", data=dict(scenario.case_history))
 
 
 @activity.defn(name="fetch_case_history_evidence")
-async def fetch_case_history_evidence(case_id: str) -> Evidence:
-    return await CaseHistoryConnector().fetch(case_id)
+async def fetch_case_history_evidence(case_id: str, event_payload: dict[str, str]) -> Evidence:
+    return await CaseHistoryConnector().fetch(case_id, event_payload)

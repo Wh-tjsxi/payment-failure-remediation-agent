@@ -143,13 +143,32 @@ Indexed on `(case_id, created_at)` so pulling a case's full timeline in order is
 
 **Sprint 1 — Walking Skeleton:** entire workflow wired end-to-end with every step stubbed (fixture evidence, fixed diagnosis, hardcoded runbook match, always-approve policy, CLI approval endpoint, no-op executor, always-resolved verification). *Goal: one fake event reaches CASE_CLOSED in <1 min, visible in Temporal UI.*
 
-**Sprint 2 — Payment Gateway Simulator + Real Evidence Collection:** build the synthetic data generator (Payment Gateway Simulator: configurable error codes, transaction/customer/account records, trace fixtures, scriptable failure scenarios) since no real bank/processor data is available; then build gateway/OTel/customer/case-history connectors against it. Each connector fails independently without blocking others (`missing_source` flag).
+**Sprint 2 — Payment Gateway Simulator + Real Evidence Collection:** build the synthetic data generator (Payment Gateway Simulator) since no real bank/processor data is available, then build the gateway/customer/case-history connectors against it; each connector fails independently without blocking others (`missing_source` flag). The observability/OTel connector stays a Sprint 1-style stub in Sprint 2 — trace data doesn't change any remediation decision the MVP needs to demonstrate, so real Jaeger integration is deferred rather than built for realism alone.
+
+The simulator classifies decline codes into three internal categories, defined by remediation semantics rather than a full processor glossary — kept to three deliberately, since this is an MVP meant to demonstrate judgment, not model the payments domain exhaustively:
+
+| Category | Example codes | Remediation implication |
+|---|---|---|
+| `HARD_DECLINE` | `stolen_card`, `fraudulent`, `expired_card` | Never blind-retry. Fraud codes always escalate to a human, no matter the customer; expired-card codes are only fixable via a backup card. |
+| `SOFT_DECLINE` | `processing_error`, `try_again_later` | Safe to retry with backoff — the "boring" bucket, included to prove the system doesn't over-engineer every path. |
+| `FUNDS_ISSUE` | `insufficient_funds` | Retry-eligible, but *how* to retry depends on customer context — this is the category the demo scenarios below lean on. |
+
+This taxonomy is internal simulator/domain reference data, not something exposed to the diagnosis agent as ground truth — the gateway connector surfaces only the raw `decline_code` a real processor webhook would give; classifying it into a category is Sprint 3's job, not free information from Sprint 2. It exists in Sprint 2 only to keep scenario generation and connector-contract tests consistent.
+
+Customer/case-history evidence gains three proprietary fields — data a real payment processor structurally can't see, but the merchant's own systems can — chosen because each one flips the correct remediation for an otherwise-identical decline code, not for realism alone:
+- `customer_tier` (`high_value` | `standard`) — same `insufficient_funds` decline: a standard customer gets full automation, a high-value customer routes to human outreach instead of silent automation.
+- `has_backup_payment_method` (bool) — the field that makes an auto-switch-to-backup-card remediation decidable at all; without it that path can't exist.
+- `prior_remediation_attempted` (from case history, reusing data the workflow's own `REINVESTIGATION` loop already tracks) — stops the system from proposing an already-failed fix twice.
+
+Gateway evidence also gains `amount`/`currency` — a gap otherwise not closed until Sprint 5's spend-limit checks hit it cold. `Evidence.data` widens from `dict[str, str]` to `dict[str, str | int | float | bool]` to carry these fields natively, without introducing nested per-source structures. No new DB tables are needed for any of this — the simulator stays fixture-based and in-process, since nothing in Sprint 2 needs to query synthetic data directly via SQL.
+
+Three scripted scenarios anchor the sprint's acceptance criteria: the same `insufficient_funds` code for a high-value vs. a standard customer (concierge outreach vs. automated retry); the same code with a backup card on file (auto-switch instead of blind retry); and a `stolen_card` fraud hold (hard stop regardless of customer tier). Together these are enough to prove the system reasons about customer context, not just error codes, without the fixture library becoming its own maintenance burden.
 
 **Sprint 3 — LLM Diagnosis:** Claude-driven diagnosis with schema-validated output, evidence citations; 15-20 item golden set for accuracy eval.
 
 **Sprint 4 — Runbook KB + RAG:** seed 10-15 runbook entries; pgvector similarity retrieval; "no adequate match" threshold routes to human authoring.
 
-**Sprint 5 — Policy/Risk Engine:** spend limits, customer tier, runbook-specific constraints (e.g. max 3 auto-retries); every decision records which rule fired.
+**Sprint 5 — Policy/Risk Engine:** spend limits, customer tier, runbook-specific constraints (e.g. max 3 auto-retries); every decision records which rule fired. `HARD_DECLINE`-category codes (Sprint 2) are a deterministic policy block regardless of LLM confidence — a policy invariant, never a runbook suggestion.
 
 **Sprint 6 — Human Approval UX:** web dashboard with a pending-approvals queue and a popup/modal to approve or reject with full case context inline; maker-checker for high risk; SLA escalation timers.
 

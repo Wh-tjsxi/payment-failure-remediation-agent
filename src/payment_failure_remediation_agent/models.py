@@ -29,10 +29,16 @@ class CaseInput:
     force_scenario: str | None = None
 
 
+# Evidence values are scalar-typed (not just str) so numeric/boolean
+# fields (amount, has_backup_payment_method, ...) don't need re-parsing
+# by every downstream consumer -- see docs/DESIGN.md Section 3.
+EvidenceValue = str | int | float | bool
+
+
 @dataclass
 class Evidence:
     source: str
-    data: dict[str, str]
+    data: dict[str, EvidenceValue]
     missing: bool = False
 
 

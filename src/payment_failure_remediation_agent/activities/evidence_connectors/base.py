@@ -2,11 +2,12 @@
 
 docs/DESIGN.md Section 2 calls for a "pluggable Connector interface" where
 each evidence source (gateway, observability, customer data, case history)
-fails independently without blocking the others. In Sprint 1 every
-connector below is a stub that returns fixed fixture data -- the real
-per-source logic (Sprint 2) will implement `Connector.fetch`, but the
-*shape* callers depend on (Evidence, missing_source flag) is real now so
-nothing has to change when Sprint 2 swaps the stub bodies out.
+fails independently without blocking the others. Sprint 2 implements the
+real per-source logic against the Payment Gateway Simulator's scripted
+scenarios (docs/DESIGN.md Section 3) -- `event_payload` is how a
+connector finds out which scenario a case belongs to, since nothing is
+persisted to a database that a connector could look the case up in yet
+(see `simulator/scenarios.py`'s docstring).
 """
 
 from typing import Protocol
@@ -20,4 +21,4 @@ class Connector(Protocol):
     connector can't block the others (per DESIGN.md's independent-failure
     requirement)."""
 
-    async def fetch(self, case_id: str) -> Evidence: ...
+    async def fetch(self, case_id: str, event_payload: dict[str, str]) -> Evidence: ...

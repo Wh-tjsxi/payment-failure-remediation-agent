@@ -114,7 +114,9 @@ class PaymentFailureCaseWorkflow:
             retry_policy=DEFAULT_RETRY_POLICY,
         )
 
-    async def _collect_evidence(self, case_id: str) -> list[Evidence]:
+    async def _collect_evidence(
+        self, case_id: str, event_payload: dict[str, str]
+    ) -> list[Evidence]:
         activity_names = [
             "fetch_gateway_evidence",
             "fetch_observability_evidence",
@@ -125,7 +127,7 @@ class PaymentFailureCaseWorkflow:
             *[
                 workflow.execute_activity(
                     name,
-                    args=[case_id],
+                    args=[case_id, event_payload],
                     result_type=Evidence,
                     start_to_close_timeout=DEFAULT_ACTIVITY_TIMEOUT,
                     retry_policy=DEFAULT_RETRY_POLICY,
@@ -195,7 +197,7 @@ class PaymentFailureCaseWorkflow:
 
         while True:  # reinvestigation loop
             await self._transition(case_id, CaseStatus.EVIDENCE_COLLECTION, attempt_count)
-            evidence = await self._collect_evidence(case_id)
+            evidence = await self._collect_evidence(case_id, case_input.event_payload)
 
             await self._transition(case_id, CaseStatus.DIAGNOSIS, attempt_count)
             diagnosis: Diagnosis = await workflow.execute_activity(
