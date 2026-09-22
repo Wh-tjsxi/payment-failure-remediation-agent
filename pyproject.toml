@@ -35,6 +35,9 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: requires real external services (e.g. a live LLM call); excluded from the default `pytest -m \"not integration\"` CI gate",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

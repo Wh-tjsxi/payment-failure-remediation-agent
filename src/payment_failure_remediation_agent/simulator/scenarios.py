@@ -8,9 +8,14 @@ evidence fidelity (tests/test_evidence_connectors.py) -- never
 remediation correctness, since diagnosis/proposal logic doesn't exist
 yet.
 
-Kept to four scenarios on purpose: enough to prove the system reasons
-about customer context, not just error codes, without the fixture
-library becoming its own maintenance burden.
+The first four scenarios (Sprint 2) are enough on their own to prove the
+system reasons about customer context, not just error codes. Sprint 3
+adds five more -- not to hit docs/DESIGN.md's original "15-20 item"
+golden-set figure by padding with near-duplicates, but because a golden
+set needs every taxonomy category actually represented, and the
+original four only covered two of three (no SOFT_DECLINE example, and
+only one HARD_DECLINE flavor). Nine distinct, purposeful scenarios beat
+padding to an arbitrary count.
 """
 
 from dataclasses import dataclass
@@ -84,6 +89,56 @@ _SCENARIO_LIST = [
         expected_remediation_hint="escalate_to_fraud_review",
         gateway={"decline_code": "stolen_card", "amount": 500.00, "currency": "usd"},
         customer_data={"customer_tier": "high_value", "has_backup_payment_method": True},
+        case_history={"prior_remediation_attempted": False},
+    ),
+    # A second HARD_DECLINE flavor, distinct from fraud: an expired card
+    # is a dead instrument, not a fraud signal -- proves HARD_DECLINE
+    # isn't monolithic, and (paired below) that backup-card availability
+    # still matters even within a "never blind-retry" category.
+    Scenario(
+        name="expired_card_no_backup",
+        expected_taxonomy_category=category_of("expired_card"),
+        expected_remediation_hint="request_customer_update_card",
+        gateway={"decline_code": "expired_card", "amount": 99.00, "currency": "usd"},
+        customer_data={"customer_tier": "standard", "has_backup_payment_method": False},
+        case_history={"prior_remediation_attempted": False},
+    ),
+    Scenario(
+        name="expired_card_with_backup",
+        expected_taxonomy_category=category_of("expired_card"),
+        expected_remediation_hint="switch_to_backup_payment_method",
+        gateway={"decline_code": "expired_card", "amount": 99.00, "currency": "usd"},
+        customer_data={"customer_tier": "standard", "has_backup_payment_method": True},
+        case_history={"prior_remediation_attempted": False},
+    ),
+    # A second fraud example, deliberately at standard tier (not
+    # high_value like the stolen-card scenario) -- confirms the
+    # fraud-hard-stop generalizes across tiers, not just the one tested.
+    Scenario(
+        name="fraudulent_charge_flagged",
+        expected_taxonomy_category=category_of("fraudulent"),
+        expected_remediation_hint="escalate_to_fraud_review",
+        gateway={"decline_code": "fraudulent", "amount": 650.00, "currency": "usd"},
+        customer_data={"customer_tier": "standard", "has_backup_payment_method": False},
+        case_history={"prior_remediation_attempted": False},
+    ),
+    # SOFT_DECLINE: the "boring" bucket -- no customer-context nuance
+    # needed, just retry with backoff. Two examples so the golden set
+    # doesn't have a single-item category.
+    Scenario(
+        name="processing_error_transient",
+        expected_taxonomy_category=category_of("processing_error"),
+        expected_remediation_hint="auto_retry_with_backoff",
+        gateway={"decline_code": "processing_error", "amount": 59.00, "currency": "usd"},
+        customer_data={"customer_tier": "standard", "has_backup_payment_method": False},
+        case_history={"prior_remediation_attempted": False},
+    ),
+    Scenario(
+        name="try_again_later_transient",
+        expected_taxonomy_category=category_of("try_again_later"),
+        expected_remediation_hint="auto_retry_with_backoff",
+        gateway={"decline_code": "try_again_later", "amount": 39.00, "currency": "usd"},
+        customer_data={"customer_tier": "standard", "has_backup_payment_method": False},
         case_history={"prior_remediation_attempted": False},
     ),
 ]

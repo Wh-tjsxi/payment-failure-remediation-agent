@@ -1,32 +1,22 @@
-"""Decline-code taxonomy (docs/DESIGN.md Section 3, Sprint 2).
+"""Decline-code -> category answer key (docs/DESIGN.md Section 3, Sprint 2).
 
-Maps Stripe/Adyen-style decline codes to a small set of categories
-defined by remediation semantics, not payments-domain completeness --
-kept to three on purpose, since this project is an MVP meant to
-demonstrate judgment, not model the payments domain exhaustively.
+`DeclineCategory` itself lives in `models.py` (it's a core domain
+concept `Diagnosis` needs). What belongs here is `category_of`: the
+mapping from a raw Stripe/Adyen-style decline code to its category,
+used only to (a) build internally-consistent scripted scenarios and
+(b) let tests grade the diagnosis agent's classification against a
+known-correct answer.
 
-This is internal simulator/reference data. It is never handed to the
-diagnosis agent as ground truth -- the gateway connector only ever
-surfaces the raw `decline_code` a real processor webhook would give;
-classifying it into a category here is Sprint 3's (the diagnosis
-agent's) job, not free information from Sprint 2.
+This mapping is never read by the diagnosis agent itself -- the gateway
+connector only ever surfaces the raw `decline_code` a real processor
+webhook would give; classifying it into a category is the diagnosis
+agent's own job (Sprint 3), done through real reasoning about what the
+code means, not a lookup against this table. Importing this module from
+`activities/diagnosis_agent.py` for anything other than the
+`DeclineCategory` type itself would defeat that.
 """
 
-from enum import StrEnum
-
-
-class DeclineCategory(StrEnum):
-    # Never blind-retry. Fraud codes always escalate to a human, no
-    # matter the customer; expired-card codes are only fixable via a
-    # backup card.
-    HARD_DECLINE = "HARD_DECLINE"
-    # Safe to retry with backoff -- the "boring" bucket, included to
-    # prove the system doesn't over-engineer every path.
-    SOFT_DECLINE = "SOFT_DECLINE"
-    # Retry-eligible, but *how* to retry depends on customer context --
-    # the category the scripted scenarios lean on.
-    FUNDS_ISSUE = "FUNDS_ISSUE"
-
+from payment_failure_remediation_agent.models import DeclineCategory
 
 _CATEGORY_BY_CODE: dict[str, DeclineCategory] = {
     "stolen_card": DeclineCategory.HARD_DECLINE,

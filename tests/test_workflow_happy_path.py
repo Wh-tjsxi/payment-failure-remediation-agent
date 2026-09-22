@@ -25,7 +25,6 @@ from payment_failure_remediation_agent.actions import (
     toggle_feature_flag,
 )
 from payment_failure_remediation_agent.activities import (
-    diagnosis_agent,
     remediation_proposal_agent,
     resolution_analysis,
     runbook_retrieval,
@@ -37,7 +36,14 @@ from payment_failure_remediation_agent.activities.evidence_connectors import (
     gateway,
     observability,
 )
-from payment_failure_remediation_agent.models import ApprovalDecision, CaseInput, CaseStatus
+from payment_failure_remediation_agent.models import (
+    ApprovalDecision,
+    CaseInput,
+    CaseStatus,
+    DeclineCategory,
+    Diagnosis,
+    Evidence,
+)
 from payment_failure_remediation_agent.policy import rules_engine
 from payment_failure_remediation_agent.workflows.payment_failure_case_workflow import (
     PaymentFailureCaseWorkflow,
@@ -70,12 +76,28 @@ async def fake_append_audit_event(
     pass
 
 
+# Sprint 3 made `diagnose` a real Claude activity -- faked here for the
+# same reason `persist_case_status`/`append_audit_event` are faked:
+# this test proves workflow *logic*, not a live external dependency, so
+# it needs no ANTHROPIC_API_KEY to run. The golden-set eval
+# (tests/test_diagnosis_golden_set.py, marked `integration`) is what
+# actually exercises the real Claude call.
+@activity.defn(name="diagnose")
+async def fake_diagnose(case_id: str, evidence: list[Evidence]) -> Diagnosis:
+    return Diagnosis(
+        root_cause="insufficient_funds",
+        decline_category=DeclineCategory.FUNDS_ISSUE,
+        confidence=0.9,
+        evidence_cited=[e.source for e in evidence],
+    )
+
+
 ALL_ACTIVITIES = [
     gateway.fetch_gateway_evidence,
     observability.fetch_observability_evidence,
     customer_data.fetch_customer_data_evidence,
     case_history.fetch_case_history_evidence,
-    diagnosis_agent.diagnose,
+    fake_diagnose,
     runbook_retrieval.retrieve_runbook_entry,
     rules_engine.evaluate_policy,
     remediation_proposal_agent.propose_remediation,

@@ -2,6 +2,27 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
+class DeclineCategory(StrEnum):
+    """Decline-code taxonomy, defined by remediation semantics
+    (docs/DESIGN.md Section 3, Sprint 2). Lives here, not in
+    `simulator/`, because it's a core domain concept `Diagnosis` needs
+    -- `simulator/taxonomy.py` keeps only `category_of`, the
+    decline_code -> category answer key, which really is
+    simulator-internal reference data (see that module's docstring for
+    why the diagnosis agent must never read it directly)."""
+
+    # Never blind-retry. Fraud codes always escalate to a human, no
+    # matter the customer; expired-card codes are only fixable via a
+    # backup card.
+    HARD_DECLINE = "HARD_DECLINE"
+    # Safe to retry with backoff -- the "boring" bucket, included to
+    # prove the system doesn't over-engineer every path.
+    SOFT_DECLINE = "SOFT_DECLINE"
+    # Retry-eligible, but *how* to retry depends on customer context --
+    # the category the scripted scenarios lean on.
+    FUNDS_ISSUE = "FUNDS_ISSUE"
+
+
 class CaseStatus(StrEnum):
     CASE_CREATED = "CASE_CREATED"
     EVIDENCE_COLLECTION = "EVIDENCE_COLLECTION"
@@ -45,6 +66,10 @@ class Evidence:
 @dataclass
 class Diagnosis:
     root_cause: str
+    # Structured, not just free text in root_cause -- Sprint 5's policy
+    # engine needs a deterministic field to hard-block HARD_DECLINE cases
+    # on, regardless of LLM confidence (docs/DESIGN.md Section 3).
+    decline_category: DeclineCategory
     confidence: float
     evidence_cited: list[str] = field(default_factory=list)
 

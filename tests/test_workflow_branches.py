@@ -29,7 +29,6 @@ from payment_failure_remediation_agent.actions import (
     toggle_feature_flag,
 )
 from payment_failure_remediation_agent.activities import (
-    diagnosis_agent,
     remediation_proposal_agent,
     resolution_analysis,
     runbook_retrieval,
@@ -45,6 +44,9 @@ from payment_failure_remediation_agent.models import (
     ApprovalDecision,
     CaseInput,
     CaseStatus,
+    DeclineCategory,
+    Diagnosis,
+    Evidence,
     RunbookEntry,
 )
 from payment_failure_remediation_agent.policy import rules_engine
@@ -83,12 +85,25 @@ async def fake_append_audit_event(
     pass
 
 
+# Same reasoning as test_workflow_happy_path.py's fake_diagnose: Sprint
+# 3 made `diagnose` a real Claude activity, faked here so branch tests
+# don't need ANTHROPIC_API_KEY to prove workflow logic.
+@activity.defn(name="diagnose")
+async def fake_diagnose(case_id: str, evidence: list[Evidence]) -> Diagnosis:
+    return Diagnosis(
+        root_cause="insufficient_funds",
+        decline_category=DeclineCategory.FUNDS_ISSUE,
+        confidence=0.9,
+        evidence_cited=[e.source for e in evidence],
+    )
+
+
 ALL_ACTIVITIES = [
     gateway.fetch_gateway_evidence,
     observability.fetch_observability_evidence,
     customer_data.fetch_customer_data_evidence,
     case_history.fetch_case_history_evidence,
-    diagnosis_agent.diagnose,
+    fake_diagnose,
     runbook_retrieval.retrieve_runbook_entry,
     rules_engine.evaluate_policy,
     remediation_proposal_agent.propose_remediation,
