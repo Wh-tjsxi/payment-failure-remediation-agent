@@ -6,7 +6,7 @@ Built as a personal project on entirely synthetic data (no real bank/payment dat
 
 ## Status
 
-Sprint 1 (Walking Skeleton) is complete — see `docs/DESIGN.md` Section 3 for the sprint plan. A fake `payment.failed` event runs end-to-end through Temporal to `CASE_CLOSED` with every step stubbed. Currently starting Sprint 2 (Payment Gateway Simulator + real evidence collection).
+Sprints 1-3 are complete — see `docs/DESIGN.md` Section 3 for the sprint plan. A fake `payment.failed` event runs end-to-end through Temporal to `CASE_CLOSED` (Sprint 1); evidence collection is real, driven by a scripted Payment Gateway Simulator with a decline-code taxonomy and proprietary customer-context fields (Sprint 2); diagnosis is a real Claude-driven activity that classifies each case and cites its evidence (Sprint 3). Policy, runbook retrieval/RAG, remediation proposals, and the action catalog are still stubs. Currently starting Sprint 4 (Runbook KB + RAG).
 
 ## Quickstart
 
