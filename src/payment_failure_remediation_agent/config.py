@@ -18,3 +18,12 @@ DATABASE_URL = os.environ.get(
 # it (docs/DESIGN.md Section 3).
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 DIAGNOSIS_MODEL = os.environ.get("DIAGNOSIS_MODEL", "claude-sonnet-5")
+
+# Sprint 4: local, offline embedding model (fastembed/ONNX, no API key,
+# no PyTorch) for runbook retrieval -- keeps this project's self-hosted
+# stance rather than adding Voyage/OpenAI as a new external dependency.
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+# Cosine-similarity floor a runbook candidate must clear to count as a
+# real match; below this, retrieve_runbook_entry reports match_found=False
+# and the case routes to HUMAN_RUNBOOK_AUTHORING instead of guessing.
+RUNBOOK_MATCH_THRESHOLD = float(os.environ.get("RUNBOOK_MATCH_THRESHOLD", "0.72"))

@@ -11,6 +11,7 @@ dependencies = [
     "anthropic>=0.34",
     "psycopg[binary]>=3.2",
     "pgvector>=0.3",
+    "fastembed>=0.3",
     "pydantic>=2.8",
     "opentelemetry-sdk>=1.26",
     "opentelemetry-exporter-otlp>=1.26",
