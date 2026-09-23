@@ -11,7 +11,9 @@ from temporalio.worker import Worker
 
 from payment_failure_remediation_agent.actions import (
     issue_refund,
+    request_card_update,
     retry_payment,
+    switch_backup_payment_method,
     toggle_feature_flag,
 )
 from payment_failure_remediation_agent.activities import (
@@ -60,6 +62,8 @@ async def main() -> None:
             retry_payment.retry_payment,
             issue_refund.issue_refund,
             toggle_feature_flag.toggle_feature_flag,
+            switch_backup_payment_method.switch_backup_payment_method,
+            request_card_update.request_card_update,
             verification.verify_resolution,
             resolution_analysis.analyze_resolution,
             persistence.persist_case_status,
