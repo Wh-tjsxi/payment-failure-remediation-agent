@@ -95,9 +95,15 @@ class RemediationProposal:
 
 @dataclass
 class PolicyDecision:
+    # False = hard block: the workflow escalates to a human, no remediation.
     approved: bool
     reason: str
     rule_fired: str
+    # True = a human must approve before the action runs; False = low-risk
+    # enough to run without one. Defaults to True so a decision built without
+    # thinking about it fails safe (needs a human) instead of silently
+    # granting autonomy.
+    requires_approval: bool = True
 
 
 @dataclass
