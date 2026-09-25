@@ -1,0 +1,124 @@
+{
+  "model": "claude-sonnet-5",
+  "diagnoses": [
+    {
+      "scenario": "insufficient_funds_standard_customer",
+      "decline_category": "FUNDS_ISSUE",
+      "root_cause": "The gateway returned decline_code 'insufficient_funds' for a $49.00 USD charge, indicating the cardholder's account did not have sufficient available balance at time of authorization. This is a funds-availability issue rather than a problem with the instrument itself or a processor/issuer outage. Customer context shows a 'standard' tier customer with no backup payment method on file (has_backup_payment_method: False) and no prior remediation attempts (prior_remediation_attempted: False), meaning this is the first failure and there is no alternate payment method readily available for this customer.",
+      "confidence": 0.85,
+      "evidence_cited": [
+        "gateway.decline_code: insufficient_funds",
+        "gateway.amount/currency: 49.0 USD",
+        "customer_data.customer_tier: standard",
+        "customer_data.has_backup_payment_method: False",
+        "case_history.prior_remediation_attempted: False"
+      ]
+    },
+    {
+      "scenario": "insufficient_funds_high_value_customer",
+      "decline_category": "FUNDS_ISSUE",
+      "root_cause": "The card was declined with issuer code 'insufficient_funds', indicating the cardholder's account currently lacks sufficient funds to cover the $249.00 USD charge. This is a funds-availability issue rather than a problem with the card itself. Relevant context: the customer is a 'high_value' tier customer with no backup payment method on file (has_backup_payment_method: False), and no prior remediation has been attempted for this case (prior_remediation_attempted: False), meaning this is the first failure observed and no fallback payment path currently exists.",
+      "confidence": 0.85,
+      "evidence_cited": [
+        "gateway.decline_code: insufficient_funds",
+        "gateway.amount/currency: 249.0 usd",
+        "customer_data.customer_tier: high_value",
+        "customer_data.has_backup_payment_method: False",
+        "case_history.prior_remediation_attempted: False"
+      ]
+    },
+    {
+      "scenario": "insufficient_funds_with_backup_card",
+      "decline_category": "FUNDS_ISSUE",
+      "root_cause": "The gateway returned decline_code 'insufficient_funds' for a $79.00 USD charge, indicating the cardholder's account currently lacks sufficient funds to cover the transaction. This is a funds-availability issue rather than a problem with the card instrument itself (e.g., not expired/stolen). Customer context shows a standard-tier customer who does have a backup payment method on file (has_backup_payment_method: True), and no prior remediation has been attempted on this case (prior_remediation_attempted: False), meaning this is the first failure observed for this transaction.",
+      "confidence": 0.85,
+      "evidence_cited": [
+        "gateway.decline_code: insufficient_funds",
+        "gateway.amount/currency: 79.0 usd",
+        "customer_data.customer_tier: standard",
+        "customer_data.has_backup_payment_method: True",
+        "case_history.prior_remediation_attempted: False"
+      ]
+    },
+    {
+      "scenario": "fraud_hold_stolen_card",
+      "decline_category": "HARD_DECLINE",
+      "root_cause": "Gateway returned decline_code 'stolen_card', indicating the issuer has flagged this payment instrument as reported stolen/fraudulent. This is a fraud-related hard decline tied to the instrument itself, not a transient processor issue or a balance problem. Customer tier (high_value) and availability of a backup payment method are noted but are not relevant to root cause classification given the explicit fraud flag.",
+      "confidence": 0.95,
+      "evidence_cited": [
+        "gateway.decline_code = 'stolen_card'"
+      ]
+    },
+    {
+      "scenario": "expired_card_no_backup",
+      "decline_category": "HARD_DECLINE",
+      "root_cause": "Gateway returned decline_code 'expired_card', indicating the card on file has passed its expiration date. This is a permanent instrument-level failure, not a transient issuer/network issue or a balance problem. Customer is on the 'standard' tier with no backup payment method on file (has_backup_payment_method: False), and no prior remediation has been attempted (prior_remediation_attempted: False), meaning the account currently has no viable path to retry this charge automatically.",
+      "confidence": 0.9,
+      "evidence_cited": [
+        "gateway.decline_code: expired_card",
+        "customer_data.has_backup_payment_method: False",
+        "customer_data.customer_tier: standard",
+        "case_history.prior_remediation_attempted: False"
+      ]
+    },
+    {
+      "scenario": "expired_card_with_backup",
+      "decline_category": "HARD_DECLINE",
+      "root_cause": "The gateway returned decline_code 'expired_card', indicating the card on file has passed its expiration date. This is a permanent instrument-level failure, not a transient issuer/network issue or an insufficient-funds condition. The card itself cannot be charged again as-is regardless of retry timing. Customer context shows tier 'standard' and has_backup_payment_method=True, with no prior remediation attempted (case_history.prior_remediation_attempted=False), which may be relevant for downstream handling but does not change the classification of the decline itself.",
+      "confidence": 0.95,
+      "evidence_cited": [
+        "gateway.decline_code=expired_card",
+        "customer_data.has_backup_payment_method=True",
+        "customer_data.customer_tier=standard",
+        "case_history.prior_remediation_attempted=False"
+      ]
+    },
+    {
+      "scenario": "fraudulent_charge_flagged",
+      "decline_category": "HARD_DECLINE",
+      "root_cause": "The gateway returned decline_code 'fraudulent', indicating the issuer or fraud-detection system flagged the charge (amount $650.00 USD) as fraudulent/unauthorized. This is a fraud-related hard decline on the payment instrument itself, not a transient processing issue or a balance problem. Customer context (standard tier, no backup payment method, no prior remediation attempted) does not change the fraud determination.",
+      "confidence": 0.9,
+      "evidence_cited": [
+        "gateway.decline_code = 'fraudulent'",
+        "gateway.amount = 650.0 USD",
+        "customer_data.customer_tier = 'standard'",
+        "customer_data.has_backup_payment_method = False",
+        "case_history.prior_remediation_attempted = False"
+      ]
+    },
+    {
+      "scenario": "processing_error_transient",
+      "decline_category": "SOFT_DECLINE",
+      "root_cause": "The gateway returned a 'processing_error' decline code for a $59.00 USD charge, which indicates a transient failure on the issuer or processor side (e.g., a temporary system glitch or timeout) rather than any problem with the card itself. This code is not associated with invalid card data, fraud, or insufficient funds, and case_history shows no prior remediation attempts were made, suggesting this is the first observed instance of the failure rather than a persistent pattern.",
+      "confidence": 0.7,
+      "evidence_cited": [
+        "gateway.decline_code = 'processing_error'",
+        "case_history.prior_remediation_attempted = False"
+      ]
+    },
+    {
+      "scenario": "try_again_later_transient",
+      "decline_category": "SOFT_DECLINE",
+      "root_cause": "Gateway returned decline_code 'try_again_later', which is a generic issuer/processor-side transient error (e.g., temporary processing issue, timeout, or system unavailability) rather than an indication of card invalidity or insufficient funds. This class of code typically resolves on retry. Case history shows no prior remediation attempt yet, so this is the first observed failure.",
+      "confidence": 0.75,
+      "evidence_cited": [
+        "gateway.decline_code = try_again_later",
+        "case_history.prior_remediation_attempted = False"
+      ]
+    },
+    {
+      "scenario": "insufficient_funds_standard_customer_wordy_live_run",
+      "decline_category": "FUNDS_ISSUE",
+      "root_cause": "The gateway returned decline_code 'insufficient_funds' for a $49 USD charge, indicating the cardholder's account lacked sufficient funds at time of authorization. This is a funds-availability issue rather than a problem with the instrument itself or a processor outage. Note the observability span shows a 'timeout_calling_processor' error, which is somewhat inconsistent with a clean decline response (possibly a logging/tracing artifact on a stub trace), but the gateway's explicit decline_code is the authoritative signal here. Customer context is relevant to remediation planning: customer_tier is 'standard', the customer has no backup payment method on file (has_backup_payment_method: 0), and no prior remediation has been attempted (prior_remediation_attempted: 0).",
+      "confidence": 0.7,
+      "evidence_cited": [
+        "gateway.decline_code=insufficient_funds",
+        "gateway.amount/currency=49 usd",
+        "observability.span_error=timeout_calling_processor",
+        "customer_data.customer_tier=standard",
+        "customer_data.has_backup_payment_method=0",
+        "case_history.prior_remediation_attempted=0"
+      ]
+    }
+  ]
+}

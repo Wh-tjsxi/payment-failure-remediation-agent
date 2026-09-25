@@ -1,0 +1,4 @@
+{
+  "_comment": "Your own eval queries -- same fields as retrieval_queries_authored.json 'queries' entries (id, split, decline_category, root_cause, expected_entry_ids, expected_action, note). Add 'author': 'user'. Queries written by someone other than the corpus author make the eval much less optimistic. Empty for now.",
+  "queries": []
+}

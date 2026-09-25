@@ -31,7 +31,6 @@ from payment_failure_remediation_agent.actions import (
 from payment_failure_remediation_agent.activities import (
     remediation_proposal_agent,
     resolution_analysis,
-    runbook_retrieval,
     verification,
 )
 from payment_failure_remediation_agent.activities.evidence_connectors import (
@@ -98,13 +97,26 @@ async def fake_diagnose(case_id: str, evidence: list[Evidence]) -> Diagnosis:
     )
 
 
+# Sprint 4 made `retrieve_runbook_entry` need Postgres + Claude. Faked for the
+# same reason as `diagnose`: these tests prove workflow logic, not retrieval
+# (test_runbook_retrieval_golden_set.py covers the real thing).
+@activity.defn(name="retrieve_runbook_entry")
+async def fake_retrieve_runbook_entry(case_id: str, diagnosis: Diagnosis) -> RunbookEntry:
+    return RunbookEntry(
+        entry_id="RB-0001",
+        title="Insufficient funds, standard customer, no backup card",
+        recommended_action="retry_payment",
+        match_found=True,
+    )
+
+
 ALL_ACTIVITIES = [
     gateway.fetch_gateway_evidence,
     observability.fetch_observability_evidence,
     customer_data.fetch_customer_data_evidence,
     case_history.fetch_case_history_evidence,
     fake_diagnose,
-    runbook_retrieval.retrieve_runbook_entry,
+    fake_retrieve_runbook_entry,
     rules_engine.evaluate_policy,
     remediation_proposal_agent.propose_remediation,
     retry_payment.retry_payment,

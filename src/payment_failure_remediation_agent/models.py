@@ -80,11 +80,10 @@ class RunbookEntry:
     title: str
     recommended_action: str
     match_found: bool
-    # Cosine similarity of the best candidate against the diagnosis, set
-    # by the real Sprint 4 retrieval activity; None for entries that
-    # never went through similarity search (human-authored via the
+    # Why the retrieval judge picked this entry (or answered NONE). Empty
+    # for entries that never went through it (human-authored via the
     # `author_runbook` signal, or older force_scenario test stubs).
-    similarity_score: float | None = None
+    reason: str = ""
 
 
 @dataclass
