@@ -106,7 +106,7 @@ stateDiagram-v2
 
 ### Database schema (as built so far)
 
-Only 2 of the 9 entities above have a real Postgres table today — the rest stay as Temporal workflow/activity history until the sprint that gives them a concrete reason to be queried directly from SQL (see Sprint 1 in Section 3). This section is kept in sync with `db/migrations/0001_init.sql`, which is the source of truth for exact column types/constraints.
+Only 3 of the 9 entities above have a real Postgres table today (`cases` and `audit_events` from Sprint 1, `runbook_entries` from Sprint 4) — the rest stay as Temporal workflow/activity history until the sprint that gives them a concrete reason to be queried directly from SQL (see Sprint 1 in Section 3). This section is kept in sync with `db/migrations/0001_init.sql` and `0002_runbook_entries.sql`, which are the source of truth for exact column types/constraints.
 
 **`cases`** — one row per case, mirrors the workflow's current state:
 
@@ -133,7 +133,20 @@ Only 2 of the 9 entities above have a real Postgres table today — the rest sta
 
 Indexed on `(case_id, created_at)` so pulling a case's full timeline in order is cheap.
 
-**Not built yet:** `Evidence`, `Diagnosis`, `RemediationProposal`, `Action`, `Approval`, `RunbookEntry`, `Verification` tables. Each gets added in the sprint that first needs to persist it, rather than all 9 up front — a stricter YAGNI call than this doc originally implied, made explicitly during Sprint 1.
+**`runbook_entries`** — the seeded canonical runbook corpus that retrieval searches (Sprint 4):
+
+| Column | Type | Notes |
+|---|---|---|
+| `entry_id` | `TEXT` PK | e.g. `RB-0001` |
+| `title` | `TEXT` | |
+| `body` | `TEXT` | Full human-readable runbook prose |
+| `recommended_action` | `TEXT` | Must name a real registered action activity; the workflow dispatches EXECUTING to it by name |
+| `embedding` | `VECTOR(384)` | Local `BAAI/bge-small-en-v1.5` embedding of the entry's short "situation" text; changing the model means re-seeding. No ANN index (exact scan is fine at this size) |
+| `created_at` | `TIMESTAMPTZ` | |
+
+Human-authored entries from `HUMAN_RUNBOOK_AUTHORING` are still in-memory only; persisting and re-embedding them is Sprint 10.
+
+**Not built yet:** `Evidence`, `Diagnosis`, `RemediationProposal`, `Action`, `Approval`, `Verification` tables. Each gets added in the sprint that first needs to persist it, rather than all 9 up front — a stricter YAGNI call than this doc originally implied, made explicitly during Sprint 1.
 
 ---
 
@@ -166,7 +179,7 @@ Three scripted scenarios anchor the sprint's acceptance criteria: the same `insu
 
 **Sprint 3 — LLM Diagnosis (built and verified 2026-09-22):** Claude-driven diagnosis with schema-validated output, evidence citations, and a golden set for accuracy eval. Replaced `activities/diagnosis_agent.py`'s Sprint 1 stub (which ignored its evidence entirely and always returned a fixed `Diagnosis`) with a real activity that reasons over the `Evidence` Sprint 2 populates.
 
-`Diagnosis` gained a `decline_category: DeclineCategory` field, structured and separate from the narrative `root_cause` — necessary, not optional: Sprint 5's policy engine already has a committed requirement (this doc's own Sprint 5 line) that `HARD_DECLINE`-category codes are a deterministic policy block regardless of LLM confidence, which only works if the category is a real field policy can check. `DeclineCategory` itself moved from `simulator/taxonomy.py` into `models.py` during implementation (not part of the original plan) — building the real activity surfaced a genuine circular import (`models → simulator package → simulator/scenarios.py → models`, still mid-initialization), and the fix also happens to be the architecturally cleaner split: `models.py` now owns the enum (core domain concept `Diagnosis` needs), while `simulator/taxonomy.py` keeps only `category_of`, the decline_code → category answer key, which really is simulator-internal reference data. The diagnosis activity sets `decline_category` via forced tool-use (a `Diagnosis`-shaped schema, `tool_choice` forcing that tool) rather than parsing it out of a chat response, satisfying "schema-validated, not free text" directly — and it imports `DeclineCategory` from `models`, never `category_of` from the simulator, so it cannot cheat by looking up the answer.
+`Diagnosis` gained a `decline_category: DeclineCategory` field, structured and separate from the narrative `root_cause` — a structured, checkable field that Sprint 4's retrieval query and the golden-set eval both use. (This sprint originally planned for Sprint 5's policy engine to hard-block on it; that changed — `expired_card` is also a `HARD_DECLINE` yet fixable with a backup card, and an LLM-written field shouldn't control a safety decision, so the fraud block reads the raw gateway `decline_code` instead; see Sprint 5.) `DeclineCategory` itself moved from `simulator/taxonomy.py` into `models.py` during implementation (not part of the original plan) — building the real activity surfaced a genuine circular import (`models → simulator package → simulator/scenarios.py → models`, still mid-initialization), and the fix also happens to be the architecturally cleaner split: `models.py` now owns the enum (core domain concept `Diagnosis` needs), while `simulator/taxonomy.py` keeps only `category_of`, the decline_code → category answer key, which really is simulator-internal reference data. The diagnosis activity sets `decline_category` via forced tool-use (a `Diagnosis`-shaped schema, `tool_choice` forcing that tool) rather than parsing it out of a chat response, satisfying "schema-validated, not free text" directly — and it imports `DeclineCategory` from `models`, never `category_of` from the simulator, so it cannot cheat by looking up the answer.
 
 Model choice is Sonnet only, as planned — no Haiku cost-split yet. `Diagnosis.confidence` stays purely informational, as planned. The prompt handles a partially-missing evidence list by rendering `UNAVAILABLE (connector failed)` per missing source rather than fabricating data.
 
@@ -178,9 +191,36 @@ The golden set reuses Sprint 2's scenario library, extended from 4 to **9** scen
 
 **One more bug found while wiring this up:** `tests/test_workflow_happy_path.py` and `tests/test_workflow_branches.py` both import the real `diagnosis_agent.diagnose` function directly into their Temporal test-environment worker — once it became a live Claude call, those 9 tests started failing for lack of an API key, even though they're pure workflow-logic tests with no business needing a live LLM. Fixed the same way `persist_case_status`/`append_audit_event` were already faked for the same reason (avoiding a real Postgres dependency): added a `fake_diagnose` activity registered under the same `"diagnose"` name in both test files.
 
-**Sprint 4 — Runbook KB + RAG:** seed 10-15 runbook entries; pgvector similarity retrieval; "no adequate match" threshold routes to human authoring.
+**Sprint 4 — Runbook KB + RAG (built and verified 2026-09-24):** replaced `activities/runbook_retrieval.py`'s stub with real retrieval. The original plan here (seed 10-15 entries; pgvector similarity; a "no adequate match" similarity threshold routes to human authoring) was changed by measurement, not by preference.
 
-**Sprint 5 — Policy/Risk Engine:** spend limits, customer tier, runbook-specific constraints (e.g. max 3 auto-retries); every decision records which rule fired. `HARD_DECLINE`-category codes (Sprint 2) are a deterministic policy block regardless of LLM confidence — a policy invariant, never a runbook suggestion.
+*What we measured first.* Before writing the retrieval code we built an offline eval: 30 labelled queries (18 should-match, 12 should-not-match) from frozen real diagnoses plus hand-written hard negatives (fraud, high-value tier, uncovered codes, repeat failures), scored by the recommended *action* and by the risk of the action picked when wrong.
+- **No similarity threshold can work.** Cosine scores for right and wrong matches overlap completely in every variant (gap −0.06 to −0.07; all scores in 0.73-0.97), so "below threshold → human" cannot separate them.
+- **Embeddings miss one-word differences** such as "backup card on file" vs "no backup". Fraud queries even matched the "switch to the backup card" entry, so similarity alone would recommend that for a stolen card.
+- **A bigger embedder doesn't fix it:** a 1024-dim model from the same family made the gap *worse* (−0.108). Dimension count was never the bottleneck.
+- **A cross-encoder reranker fails too:** 13/18 right action, cannot answer "none", and made one high-risk error.
+- **But recall@3 was ~100%:** the right entry is almost always in the top 3, so vectors are a good *candidate generator*, just not a decision-maker.
+
+*What was built.* Two stages, fully encapsulated in the activity; the workflow still receives one `RunbookEntry` (`match_found=False` routes to `HUMAN_RUNBOOK_AUTHORING`), so its shape did not change.
+1. **Candidates:** the diagnosis is embedded locally (`fastembed`, `BAAI/bge-small-en-v1.5`, 384-dim, ONNX, no API key, matching this project's self-hosted stance) and pgvector returns the top 3 by cosine distance (exact scan, no ANN index at this corpus size).
+2. **Judge:** a Claude judge (forced tool-use, `reason` written before the choice) picks the one entry that fits *every* stated detail (decline reason, backup card, tier, prior attempts) or `NONE`. On the eval: 18/18 right action, 12/12 correctly `NONE`, zero high-risk errors. A no-vector variant (whole corpus in the prompt) tied, and was the simpler option at 6 entries; the top-3 design was kept because it is the real RAG shape and scales past a prompt.
+
+*Corpus.* 6 entries (not 10-15: padding with near-duplicates would repeat Sprint 2's over-scoping mistake), plus two no-op action stubs (`switch_backup_payment_method`, `request_card_update`) so every recommended action names a real registered activity. Two fraud scenarios and the high-value-tier funds scenario are deliberately *unseeded* and must resolve to no match. **Rule: never add two entries that fit the same situation** — the first real end-to-end run found that a duplicate (an extra RB-0001 rephrasing) made the judge see a tie and answer `NONE` on realistic, wordier diagnoses, which the tidier test fixtures had hidden; the duplicate was removed and that diagnosis is now a regression fixture.
+
+*Verified.* ruff and `mypy src` clean; 52 tests pass (33 offline, 19 integration that call the real DB and Claude). A real end-to-end run (real worker, Temporal, Postgres, retrieval and Claude) took a standard insufficient-funds case to `CASE_CLOSED` in 8 seconds, and a `stolen_card` case correctly returned no match and parked at `HUMAN_RUNBOOK_AUTHORING`.
+
+*Known limits (not hidden).* The eval's corpus, queries and judge were all written by one author (Claude), so "30/30" is a result on an easy set: user-written queries are still to be added (`tests/fixtures/retrieval_queries_user.json`). Judge stability across repeated runs was only spot-checked. The judge reads each candidate's short situation text from `runbook/corpus.py` by id (the table has no such column), so entries authored outside that file will need a schema change — Sprint 10's provisional → canonical lifecycle is where that lands.
+
+**Sprint 5 — Policy/Risk Engine, proposal, and approval routing (designed 2026-09-24, not built yet):** the AI's job is diagnosis and choosing the runbook entry; everything safety-critical is a small deterministic rule table. The engine is non-LLM, the *diagnosis is deliberately not an input*, every decision records which rule fired (`PolicyDecision.rule_fired`), and anything it cannot verify fails safe (asks a human). Rules run in order, first match wins:
+1. **Fraud hard block** — the raw gateway `decline_code` is `fraudulent` or `stolen_card`: never auto-remediated, escalated to a human, whatever the customer, amount or action. (This reads the raw code, not the `HARD_DECLINE` category: `expired_card` is also a `HARD_DECLINE` but is safely fixable with a backup card, so the category can't drive the block, and an LLM-written field must not control a safety decision.)
+2. **Gateway evidence or amount missing** — fraud can't be ruled out, so a human approves.
+3. **Action risk tier** from a small action catalog (`retry_payment` and `request_card_update` low; `switch_backup_payment_method`, `issue_refund`, `toggle_feature_flag` high; an unknown action counts as high): only low-risk actions may run unattended.
+4. **Amount** — a charge of $100 or more always goes to a human approver with a packet (summary, recommendation, evidence), whatever the diagnosis or match quality.
+5. **First attempt only** — auto-approve only when no prior remediation was attempted; a repeat, or unknown history, goes to a human. This bounds repeated retries per case (repeat retries can trigger issuer flags).
+Otherwise: auto-approve a low-risk first attempt under $100.
+
+Two supporting changes: `PolicyDecision` gains `requires_approval` (defaulting to true so an unset decision fails safe), and the workflow skips `AWAITING_APPROVAL` when policy says no approval is needed. `propose_remediation` becomes deterministic (action from the runbook entry, risk tier from the catalog, rationale from the judge's stated reason) — the judge has already made the choice, so a second LLM call would add cost without a decision to make.
+
+**Deliberately not built: a global dollar loss budget / circuit breaker** (a cumulative cap that pauses autonomy). Failed remediation is bounded *per case* by the retry/reinvestigation caps (Sprint 9); once they are exhausted the case goes to a human. "Loss" (the unrecovered amount of an autonomously handled action, after real verification) is tracked only as an observability metric, after Sprint 7 gives verification something real to measure.
 
 **Sprint 6 — Human Approval UX:** web dashboard with a pending-approvals queue and a popup/modal to approve or reject with full case context inline; maker-checker for high risk; SLA escalation timers.
 
@@ -207,7 +247,7 @@ This is a solo/personal project with synthetic data — the stack below is scope
 |---|---|---|
 | Workflow engine | **Temporal, self-hosted via its official `docker-compose`** | Temporal Cloud (managed, once uptime/SRE burden matters) |
 | LLM/agent layer | **Claude (Anthropic API)** — Sonnet for diagnosis/proposals, Haiku for cheap pre-classification; **Claude Agent SDK** for structured tool-use activities | Same — this layer doesn't change with scale, only volume/cost controls do |
-| RAG/vector store | **PostgreSQL + pgvector** (same container as primary DB) | Dedicated vector DB (Pinecone/Weaviate) if corpus/query volume grows |
+| RAG/vector store | **PostgreSQL + pgvector** (same container as primary DB) for candidate search, **`fastembed`** local embeddings (`bge-small-en-v1.5`, no API key), and a **Claude judge** that decides which candidate applies (similarity scores alone can't — see Sprint 4) | Dedicated vector DB (Pinecone/Weaviate) and an ANN index if corpus/query volume grows |
 | Backend | **Python + FastAPI**, Temporal Python SDK | Same |
 | Primary DB | **PostgreSQL** (one container) | Read replicas/sharding or distributed SQL |
 | Event bus | None needed — Temporal's own task queues carry activity dispatch; a simple Postgres table doubles as the audit/outbox log | Kafka or managed queue (SQS/Pub-Sub), only once you have independent consumers/multi-service fan-out |
@@ -237,7 +277,7 @@ A reference checklist of what a real enterprise deployment would need, kept alon
 - Evidence connectors — cassette-style contract tests per source, backed by the Payment Gateway Simulator's fixtures (no real processor calls ever needed).
 - Policy/risk engine — table-driven rule tests incl. boundary cases (exact spend limit, tier edges).
 - Action executors — mocked side effects; idempotency-key double-execution checks; parameter validation.
-- Runbook retrieval — labeled relevance set with a minimum precision/recall bar.
+- Runbook retrieval — a labelled query set scored by the *action* chosen and by the risk of a wrong pick (a wrong low-risk pick is tolerable; "switch backup card" on fraud is not), including should-not-match queries; plus an integration golden set over frozen real diagnoses. Realistic, wordy diagnoses must be in the set — tidy fixtures alone hid a real failure.
 
 **Whole-system/integration/e2e:**
 - Full Temporal test-environment runs against the Payment Gateway Simulator, exercising every state and both loop-backs.
@@ -257,7 +297,7 @@ A reference checklist of what a real enterprise deployment would need, kept alon
 - `src/activities/diagnosis_agent.py`, `src/activities/remediation_proposal_agent.py`
 - `src/policy/rules_engine.py`
 - `src/actions/{base,retry_payment,issue_refund,toggle_feature_flag}.py`
-- `db/migrations/0001_init.sql` — schema for all 9 entities in Section 2
+- `db/migrations/0001_init.sql` — schema for the entities that need SQL access so far (see Section 2's schema note; the rest are added per sprint)
 
 ## Verification
 
