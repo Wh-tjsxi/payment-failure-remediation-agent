@@ -241,7 +241,7 @@ class PaymentFailureCaseWorkflow:
                 await self._transition(case_id, CaseStatus.POLICY_RISK_CHECK, attempt_count)
                 policy_decision = await workflow.execute_activity(
                     "evaluate_policy",
-                    args=[case_id, diagnosis, runbook_entry],
+                    args=[case_id, runbook_entry, evidence],
                     result_type=PolicyDecision,
                     start_to_close_timeout=DEFAULT_ACTIVITY_TIMEOUT,
                     retry_policy=DEFAULT_RETRY_POLICY,

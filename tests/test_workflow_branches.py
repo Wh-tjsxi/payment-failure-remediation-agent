@@ -218,6 +218,34 @@ async def test_policy_hard_reject_escalates() -> None:
         assert await handle.result() == CaseStatus.CASE_ESCALATED
 
 
+async def test_fraud_decline_code_escalates_without_force_scenario() -> None:
+    """Proves the *real* `rules_engine.evaluate_policy` (not faked here)
+    blocks a fraud case on its own -- `fake_retrieve_runbook_entry` always
+    reports a match regardless of diagnosis, so if policy didn't read the
+    raw gateway decline_code independently, this would auto-remediate a
+    stolen-card case."""
+    async with await WorkflowEnvironment.start_time_skipping(
+        test_server_existing_path=_EXISTING_TEMPORAL_BINARY
+    ) as env, Worker(
+        env.client,
+        task_queue=TASK_QUEUE,
+        workflows=[PaymentFailureCaseWorkflow, RunbookUpdateReviewWorkflow],
+        activities=ALL_ACTIVITIES,
+    ):
+        case_id = str(uuid.uuid4())
+        handle = await env.client.start_workflow(
+            PaymentFailureCaseWorkflow.run,
+            CaseInput(
+                case_id=case_id,
+                event_payload={"scenario": "fraud_hold_stolen_card"},
+            ),
+            id=f"case-{case_id}",
+            task_queue=TASK_QUEUE,
+        )
+
+        assert await handle.result() == CaseStatus.CASE_ESCALATED
+
+
 async def test_approval_reject_try_different_loops_back_then_closes() -> None:
     async with await WorkflowEnvironment.start_time_skipping(
         test_server_existing_path=_EXISTING_TEMPORAL_BINARY
