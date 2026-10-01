@@ -35,6 +35,7 @@ from payment_failure_remediation_agent.activities import (
 )
 from payment_failure_remediation_agent.activities.evidence_connectors import (
     case_history,
+    customer_complaint,
     customer_data,
     gateway,
     observability,
@@ -115,6 +116,7 @@ ALL_ACTIVITIES = [
     observability.fetch_observability_evidence,
     customer_data.fetch_customer_data_evidence,
     case_history.fetch_case_history_evidence,
+    customer_complaint.fetch_customer_complaint_evidence,
     fake_diagnose,
     fake_retrieve_runbook_entry,
     rules_engine.evaluate_policy,
@@ -167,7 +169,7 @@ async def test_no_runbook_match_routes_to_human_authoring_then_closes() -> None:
             PaymentFailureCaseWorkflow.run,
             CaseInput(
                 case_id=case_id,
-                event_payload={},
+                event_payload={"scenario": "insufficient_funds_high_value_customer"},
                 force_scenario=FORCE_NO_RUNBOOK_MATCH,
             ),
             id=f"case-{case_id}",
@@ -246,7 +248,12 @@ async def test_fraud_decline_code_escalates_without_force_scenario() -> None:
         assert await handle.result() == CaseStatus.CASE_ESCALATED
 
 
-async def test_approval_reject_try_different_loops_back_then_closes() -> None:
+async def test_low_risk_first_attempt_auto_approves_without_a_signal() -> None:
+    """Sprint 5 Phase 4: the default scenario ($49, non-fraud, low-risk
+    retry_payment, first attempt) must clear every policy rule and skip
+    AWAITING_APPROVAL entirely -- no signal is sent here at all, which is
+    what actually proves the auto path ran rather than just coinciding
+    with a signal that happened to arrive."""
     async with await WorkflowEnvironment.start_time_skipping(
         test_server_existing_path=_EXISTING_TEMPORAL_BINARY
     ) as env, Worker(
@@ -259,6 +266,29 @@ async def test_approval_reject_try_different_loops_back_then_closes() -> None:
         handle = await env.client.start_workflow(
             PaymentFailureCaseWorkflow.run,
             CaseInput(case_id=case_id, event_payload={}),
+            id=f"case-{case_id}",
+            task_queue=TASK_QUEUE,
+        )
+
+        assert await handle.result() == CaseStatus.CASE_CLOSED
+
+
+async def test_approval_reject_try_different_loops_back_then_closes() -> None:
+    async with await WorkflowEnvironment.start_time_skipping(
+        test_server_existing_path=_EXISTING_TEMPORAL_BINARY
+    ) as env, Worker(
+        env.client,
+        task_queue=TASK_QUEUE,
+        workflows=[PaymentFailureCaseWorkflow, RunbookUpdateReviewWorkflow],
+        activities=ALL_ACTIVITIES,
+    ):
+        case_id = str(uuid.uuid4())
+        handle = await env.client.start_workflow(
+            PaymentFailureCaseWorkflow.run,
+            CaseInput(
+                case_id=case_id,
+                event_payload={"scenario": "insufficient_funds_high_value_customer"},
+            ),
             id=f"case-{case_id}",
             task_queue=TASK_QUEUE,
         )
@@ -297,7 +327,10 @@ async def test_approval_reject_no_automation_escalates() -> None:
         case_id = str(uuid.uuid4())
         handle = await env.client.start_workflow(
             PaymentFailureCaseWorkflow.run,
-            CaseInput(case_id=case_id, event_payload={}),
+            CaseInput(
+                case_id=case_id,
+                event_payload={"scenario": "insufficient_funds_high_value_customer"},
+            ),
             id=f"case-{case_id}",
             task_queue=TASK_QUEUE,
         )
@@ -329,7 +362,10 @@ async def test_approval_sla_escalations_exhausted() -> None:
         case_id = str(uuid.uuid4())
         handle = await env.client.start_workflow(
             PaymentFailureCaseWorkflow.run,
-            CaseInput(case_id=case_id, event_payload={}),
+            CaseInput(
+                case_id=case_id,
+                event_payload={"scenario": "insufficient_funds_high_value_customer"},
+            ),
             id=f"case-{case_id}",
             task_queue=TASK_QUEUE,
         )
@@ -351,7 +387,7 @@ async def test_execution_fails_escalates() -> None:
             PaymentFailureCaseWorkflow.run,
             CaseInput(
                 case_id=case_id,
-                event_payload={},
+                event_payload={"scenario": "insufficient_funds_high_value_customer"},
                 force_scenario=FORCE_EXECUTION_FAILS,
             ),
             id=f"case-{case_id}",
@@ -381,7 +417,7 @@ async def test_verification_not_resolved_reinvestigates_then_escalates() -> None
             PaymentFailureCaseWorkflow.run,
             CaseInput(
                 case_id=case_id,
-                event_payload={},
+                event_payload={"scenario": "insufficient_funds_high_value_customer"},
                 force_scenario=FORCE_VERIFICATION_NOT_RESOLVED,
             ),
             id=f"case-{case_id}",
@@ -416,7 +452,7 @@ async def test_new_runbook_info_spawns_review_child_workflow() -> None:
             PaymentFailureCaseWorkflow.run,
             CaseInput(
                 case_id=case_id,
-                event_payload={},
+                event_payload={"scenario": "insufficient_funds_high_value_customer"},
                 force_scenario=FORCE_NEW_RUNBOOK_INFO,
             ),
             id=f"case-{case_id}",

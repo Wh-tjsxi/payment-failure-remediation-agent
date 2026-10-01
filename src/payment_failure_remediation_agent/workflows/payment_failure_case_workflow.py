@@ -122,6 +122,7 @@ class PaymentFailureCaseWorkflow:
             "fetch_observability_evidence",
             "fetch_customer_data_evidence",
             "fetch_case_history_evidence",
+            "fetch_customer_complaint_evidence",
         ]
         results = await asyncio.gather(
             *[
@@ -269,37 +270,49 @@ class PaymentFailureCaseWorkflow:
                 await self._transition(case_id, CaseStatus.REMEDIATION_PROPOSED, attempt_count)
                 proposal = await workflow.execute_activity(
                     "propose_remediation",
-                    args=[case_id, diagnosis, runbook_entry],
+                    args=[case_id, runbook_entry],
                     result_type=RemediationProposal,
                     start_to_close_timeout=DEFAULT_ACTIVITY_TIMEOUT,
                     retry_policy=DEFAULT_RETRY_POLICY,
                 )
 
-                await self._transition(case_id, CaseStatus.AWAITING_APPROVAL, attempt_count)
-                approval_decision = await self._await_approval(case_id)
+                if policy_decision.requires_approval:
+                    await self._transition(case_id, CaseStatus.AWAITING_APPROVAL, attempt_count)
+                    approval_decision = await self._await_approval(case_id)
 
-                if approval_decision is None:
+                    if approval_decision is None:
+                        await self._transition(
+                            case_id,
+                            CaseStatus.CASE_ESCALATED,
+                            attempt_count,
+                            detail={"reason": "approval_sla_escalations_exhausted"},
+                        )
+                        return CaseStatus.CASE_ESCALATED
+                    if approval_decision.decision == "approve":
+                        break
+                    if approval_decision.decision == "reject_try_different":
+                        continue
                     await self._transition(
                         case_id,
                         CaseStatus.CASE_ESCALATED,
                         attempt_count,
-                        detail={"reason": "approval_sla_escalations_exhausted"},
+                        detail={
+                            "reason": "approval_reject_no_automation",
+                            "approver": approval_decision.approver,
+                        },
                     )
                     return CaseStatus.CASE_ESCALATED
-                if approval_decision.decision == "approve":
-                    break
-                if approval_decision.decision == "reject_try_different":
-                    continue
-                await self._transition(
+
+                # Policy says this case needs no human sign-off (low-risk
+                # action, under the amount threshold, first attempt, non-
+                # fraud) -- skip straight to EXECUTING. Still audited with
+                # the rule that authorized it, so a future admin view can
+                # show why no human was involved.
+                await self._audit(
                     case_id,
-                    CaseStatus.CASE_ESCALATED,
-                    attempt_count,
-                    detail={
-                        "reason": "approval_reject_no_automation",
-                        "approver": approval_decision.approver,
-                    },
+                    {"event": "policy_auto_approved", "rule_fired": policy_decision.rule_fired},
                 )
-                return CaseStatus.CASE_ESCALATED
+                break
 
             await self._transition(case_id, CaseStatus.EXECUTING, attempt_count)
             idempotency_key = str(workflow.uuid4())

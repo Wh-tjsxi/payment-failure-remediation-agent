@@ -41,7 +41,12 @@ supports it (including customer-context fields like tier or a missing backup pay
 method when they matter to understanding the case) -- but do not propose a remediation \
 action; that is a later step in this system, not yours. Set confidence between 0 and 1 \
 based on how much of the evidence is actually available (missing sources should lower \
-it). List only the evidence sources you actually relied on in evidence_cited."""
+it). List only the evidence sources you actually relied on in evidence_cited.
+
+Evidence may include a customer_complaint source: the customer's own free-text account of \
+what happened. Weigh it as context for root_cause and confidence, never as the basis for \
+decline_category -- classify decline_category strictly from decline_code using your own \
+knowledge, as instructed above, regardless of what the customer believes happened."""
 
 _DIAGNOSIS_TOOL: ToolParam = {
     "name": "submit_diagnosis",

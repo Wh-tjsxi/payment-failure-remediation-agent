@@ -14,6 +14,9 @@ import pytest
 from payment_failure_remediation_agent.activities.evidence_connectors.case_history import (
     CaseHistoryConnector,
 )
+from payment_failure_remediation_agent.activities.evidence_connectors.customer_complaint import (
+    CustomerComplaintConnector,
+)
 from payment_failure_remediation_agent.activities.evidence_connectors.customer_data import (
     CustomerDataConnector,
 )
@@ -35,6 +38,23 @@ async def test_missing_scenario_key_falls_back_to_standard_customer() -> None:
 def test_unknown_scenario_name_raises_instead_of_silently_defaulting() -> None:
     with pytest.raises(ValueError):
         get_scenario("not_a_real_scenario")
+
+
+async def test_customer_complaint_text_passes_through_verbatim() -> None:
+    evidence = await CustomerComplaintConnector().fetch(
+        "case-1", {"complaint_text": "my card was charged twice"}
+    )
+    assert evidence.data == {"complaint_text": "my card was charged twice"}
+    assert evidence.missing is False
+
+
+async def test_customer_complaint_absent_is_empty_not_missing() -> None:
+    """No complaint given is a normal, common case -- never a connector
+    failure, so it must not render as UNAVAILABLE in the diagnosis
+    prompt."""
+    evidence = await CustomerComplaintConnector().fetch("case-1", {})
+    assert evidence.data == {}
+    assert evidence.missing is False
 
 
 @pytest.mark.parametrize("scenario_name", list(SCENARIOS))

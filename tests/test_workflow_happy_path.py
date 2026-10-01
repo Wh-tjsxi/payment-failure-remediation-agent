@@ -31,6 +31,7 @@ from payment_failure_remediation_agent.activities import (
 )
 from payment_failure_remediation_agent.activities.evidence_connectors import (
     case_history,
+    customer_complaint,
     customer_data,
     gateway,
     observability,
@@ -110,6 +111,7 @@ ALL_ACTIVITIES = [
     observability.fetch_observability_evidence,
     customer_data.fetch_customer_data_evidence,
     case_history.fetch_case_history_evidence,
+    customer_complaint.fetch_customer_complaint_evidence,
     fake_diagnose,
     fake_retrieve_runbook_entry,
     rules_engine.evaluate_policy,

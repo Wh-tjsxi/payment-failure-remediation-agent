@@ -90,7 +90,7 @@ class RunbookEntry:
 class RemediationProposal:
     action_name: str
     rationale: str
-    risk_tier: str  # "auto" | "low" | "medium" | "high"
+    risk_tier: str  # "low" | "high" (from policy.rules_engine.ACTION_RISK_TIERS)
 
 
 @dataclass
