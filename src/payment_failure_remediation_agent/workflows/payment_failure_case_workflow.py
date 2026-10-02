@@ -276,6 +276,27 @@ class PaymentFailureCaseWorkflow:
                     retry_policy=DEFAULT_RETRY_POLICY,
                 )
 
+                # The one audit row that answers "what did the system decide
+                # and why" for this case -- logged for every case, not just
+                # ones that need a human, since it's also how the customer
+                # resolution endpoint and the admin portal's case detail view
+                # both reconstruct what happened (api/main.py's
+                # /cases/{id}/timeline and /cases/{id}/resolution).
+                await self._audit(
+                    case_id,
+                    {
+                        "event": "approval_packet",
+                        "diagnosis_root_cause": diagnosis.root_cause,
+                        "diagnosis_category": diagnosis.decline_category.value,
+                        "runbook_entry_id": runbook_entry.entry_id,
+                        "runbook_reason": runbook_entry.reason,
+                        "policy_rule_fired": policy_decision.rule_fired,
+                        "action_name": proposal.action_name,
+                        "rationale": proposal.rationale,
+                        "risk_tier": proposal.risk_tier,
+                    },
+                )
+
                 if policy_decision.requires_approval:
                     await self._transition(case_id, CaseStatus.AWAITING_APPROVAL, attempt_count)
                     approval_decision = await self._await_approval(case_id)

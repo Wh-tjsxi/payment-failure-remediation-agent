@@ -27,3 +27,9 @@ EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 # (if any) applies. A cosine-similarity threshold can't make that call --
 # see debugged_log.md sections 4-5.
 RUNBOOK_JUDGE_MODEL = os.environ.get("RUNBOOK_JUDGE_MODEL", "claude-sonnet-5")
+
+# Sprint 6a: the customer-intake frontend runs on its own dev server, a
+# different origin, so the API must explicitly allow it via CORS. A list
+# (not a single string) so a deployed frontend URL can be added later via
+# env var alone, no code change -- see CLAUDE.md's Sprint 6a deployment note.
+FRONTEND_ORIGINS = os.environ.get("FRONTEND_ORIGINS", "http://localhost:3000").split(",")
